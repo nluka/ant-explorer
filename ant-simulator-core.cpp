@@ -4,28 +4,22 @@
 #include "../cpp-lib/includes/pgm8.hpp"
 #include "ant-simulator-core.hpp"
 
-namespace fs = std::filesystem;
 using asc::Simulation, asc::Rule, asc::StepResult;
-
-static fs::path s_savePath{};
-void asc::set_save_path(char const *const p) {
-  s_savePath = p;
-}
 
 char const *asc::step_result_to_string(StepResult const res) {
   switch (res) {
-    case StepResult::NIL:                 return "nil";
-    case StepResult::SUCCESS:             return "success";
-    case StepResult::FAILED_AT_BOUNDARY:  return "hit boundary";
+    case StepResult::NIL:                return "nil";
+    case StepResult::SUCCESS:            return "success";
+    case StepResult::FAILED_AT_BOUNDARY: return "hit boundary";
     default: throw "bad StepResult";
   }
 }
 char const *asc::ant_orient_to_string(int_fast8_t const orientation) {
   switch (orientation) {
-    case AO_NORTH:  return "N";
-    case AO_EAST:   return "E";
-    case AO_SOUTH:  return "S";
-    case AO_WEST:   return "W";
+    case AO_NORTH: return "N";
+    case AO_EAST:  return "E";
+    case AO_SOUTH: return "S";
+    case AO_WEST:  return "W";
     default: throw "bad orientation";
   }
 }
@@ -161,8 +155,8 @@ Simulation::Simulation(
   std::array<Rule, 256> const &rules,
   std::vector<uint_fast64_t> &&singularSnapshots,
   std::vector<uint_fast64_t> &&periodicSnapshots
-) :
-  m_name{name},
+)
+: m_name{name},
   m_iterationsCompleted{iterationsCompleted},
   m_gridWidth{gridWidth},
   m_gridHeight{gridHeight},
@@ -177,37 +171,11 @@ Simulation::Simulation(
 {
   size_t const cellCount =
     static_cast<size_t>(gridWidth) * static_cast<size_t>(gridHeight);
+
+  // TODO: maybe handle std::bad_alloc?
   m_grid = new uint8_t[cellCount];
-  if (m_grid == nullptr) {
-    throw "not enough memory for grid";
-  }
+
   std::fill_n(m_grid, cellCount, gridInitialShade);
-
-  std::sort(m_singularSnapshots.begin(), m_singularSnapshots.end());
-  std::sort(m_periodicSnapshots.begin(), m_periodicSnapshots.end());
-
-  if (m_singularSnapshots.empty()) {
-    m_nextSingularSnapshotIdx = -1;
-  } else {
-    if (m_iterationsCompleted < m_singularSnapshots.front()) {
-      m_nextSingularSnapshotIdx = 0;
-    } else if (m_iterationsCompleted >= m_singularSnapshots.back()) {
-      m_nextSingularSnapshotIdx = -1;
-    } else {
-      for (size_t i = 0; i < m_singularSnapshots.size() - 2; ++i) {
-        size_t const rightSnapIdx = i + 1;
-        uint_fast64_t const
-          leftSnap = m_singularSnapshots[i],
-          rightSnap = m_singularSnapshots[rightSnapIdx];
-        if (
-          m_iterationsCompleted > leftSnap &&
-          m_iterationsCompleted <= rightSnap
-        ) {
-          m_nextSingularSnapshotIdx = static_cast<int>(rightSnapIdx);
-        }
-      }
-    }
-  }
 }
 
 std::string const &Simulation::name() const {
@@ -241,96 +209,7 @@ bool Simulation::is_finished() const {
   return m_mostRecentStepResult > StepResult::SUCCESS;
 }
 
-void Simulation::save() const {
-  std::string const fnameBase = m_name + '(' + std::to_string(m_iterationsCompleted) + ')';
-  fs::path const fpgmPathname = s_savePath / (fnameBase + ".pgm");
-  std::ofstream fsim(s_savePath / (fnameBase + ".sim"));
-
-  bool const isGridHomogenous =
-    arr2d::is_homogenous(m_grid, m_gridWidth, m_gridHeight);
-
-  if (!isGridHomogenous) { // write PGM file
-    // TODO: cache value instead of recomputing on each save
-    uint8_t const maxval = ([this]() {
-      for (uint8_t shade = 255; shade >= 1; --shade) {
-        auto const &rule = m_rules[shade];
-        if (rule.m_isDefined) {
-          return shade;
-        }
-      }
-      return static_cast<uint8_t>(0);
-    })();
-
-    std::ofstream fpgm(fpgmPathname);
-
-    pgm8::write_ascii(
-      &fpgm,
-      static_cast<uint16_t>(m_gridWidth),
-      static_cast<uint16_t>(m_gridHeight),
-      maxval,
-      m_grid
-    );
-  }
-
-  { // write sim file
-    // note that any properties prefixed with `lite`
-    // are specific to `ant-simulator-lite`
-
-    char const *const delim = ";\n", *const indent = "  ";
-
-    fsim
-      << "name = " << m_name << delim
-      << "iterationsCompleted = " << m_iterationsCompleted << delim
-      << "lastStepResult = " << asc::step_result_to_string(m_mostRecentStepResult) << delim
-      << "gridWidth = " << m_gridWidth << delim
-      << "gridHeight = " << m_gridHeight << delim
-      << "gridState = ";
-    if (isGridHomogenous) {
-      // using << results in double quotes being added, so gotta do this instead
-      std::string const val = std::to_string(m_grid[0]).c_str();
-      fsim.write(val.c_str(), val.size());
-    } else {
-      fsim << fpgmPathname;
-    }
-    fsim << delim
-      << "antCol = " << m_antCol << delim
-      << "antRow = " << m_antRow << delim
-      << "antOrientation = " << ant_orient_to_string(m_antOrientation) << delim;
-
-    fsim << "rules = [\n";
-    for (size_t shade = 0; shade < m_rules.size(); ++shade) {
-      auto const &rule = m_rules[shade];
-      if (rule.m_isDefined) {
-        fsim << indent << '{'
-        << shade << ','
-        << std::to_string(rule.m_replacementShade) << ','
-        << asc::turn_dir_to_string(rule.m_turnDirection)
-        << "},\n";
-      }
-    }
-    fsim << ']' << delim;
-
-    fsim << "lite.singularSnapshots = [";
-    if (m_singularSnapshots.size() > 0) {
-      fsim << '\n';
-    }
-    for (auto const snap : m_singularSnapshots) {
-      fsim << indent << snap << ",\n";
-    }
-    fsim << ']' << delim;
-
-    fsim << "lite.periodicSnapshots = [";
-    if (m_singularSnapshots.size() > 0) {
-      fsim << '\n';
-    }
-    for (auto const snap : m_periodicSnapshots) {
-      fsim << indent << snap << ",\n";
-    }
-    fsim << ']' << delim;
-  }
-}
-
-void Simulation::step_once() {
+void Simulation::step_foward() {
   size_t const currCellIdx = (m_antRow * m_gridWidth) + m_antCol;
   uint8_t const currCellShade = m_grid[currCellIdx];
   auto const &currCellRule = m_rules[currCellShade];
@@ -374,38 +253,7 @@ void Simulation::step_once() {
       m_antCol = static_cast<uint16_t>(nextCol);
       m_antRow = static_cast<uint16_t>(nextRow);
       m_mostRecentStepResult = StepResult::SUCCESS;
+      ++m_iterationsCompleted;
     }
-  }
-
-  ++m_iterationsCompleted;
-
-  // take snapshot if applicable
-  if (
-    // time to take singular snapshot?
-    m_nextSingularSnapshotIdx != -1 &&
-    (m_singularSnapshots[m_nextSingularSnapshotIdx] ==
-    m_iterationsCompleted)
-  ) {
-    save();
-    if (m_nextSingularSnapshotIdx == m_singularSnapshots.size() - 1) {
-      // that was the final singular snapshot
-      m_nextSingularSnapshotIdx = -1;
-    } else {
-      // there are more singular snapshots later
-      ++m_nextSingularSnapshotIdx;
-    }
-  } else if (
-    // time to take periodic snapshot?
-    !m_periodicSnapshots.empty() &&
-    ([this]() {
-      for (uint_fast64_t const period : m_periodicSnapshots) {
-        if (m_iterationsCompleted % period == 0) {
-          return true;
-        }
-      }
-      return false;
-    })()
-  ) {
-    save();
   }
 }

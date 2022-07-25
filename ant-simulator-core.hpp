@@ -9,8 +9,6 @@
 
 namespace asc { // stands for `ant simulator core`
 
-void set_save_path(char const *);
-
 //      AO stands for `ant orientation`
 #define AO_OVERFLOW_COUNTER_CLOCKWISE static_cast<int_fast8_t>(-1)
 #define AO_NORTH                      static_cast<int_fast8_t>( 0)
@@ -118,8 +116,7 @@ public:
   int_fast8_t ant_orientation() const;
   uint8_t const *grid() const;
   bool is_finished() const;
-  void save() const;
-  void step_once();
+  void step_foward();
 };
 
 } // namespace asc
