@@ -1,7 +1,5 @@
 #include <sstream>
 #include <algorithm>
-#include <filesystem>
-#include "../cpp-lib/includes/pgm8.hpp"
 #include "ant-simulator-core.hpp"
 
 using asc::Simulation, asc::Rule, asc::StepResult;
