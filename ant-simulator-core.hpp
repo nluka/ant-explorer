@@ -63,28 +63,6 @@ protected:
   int m_nextSingularSnapshotIdx;
 
 public:
-  static void validate_grid_width(
-    std::vector<std::string> &errors,
-    uint_fast16_t
-  );
-  static void validate_grid_height(
-    std::vector<std::string> &errors,
-    uint_fast16_t
-  );
-  static void validate_ant_col(
-    std::vector<std::string> &errors,
-    uint_fast16_t antCol,
-    uint_fast16_t gridWidth
-  );
-  static void validate_ant_row(
-    std::vector<std::string> &errors,
-    uint_fast16_t antRow,
-    uint_fast16_t gridHeight
-  );
-  static void validate_rules(
-    std::vector<std::string> &errors,
-    std::array<Rule, 256> const &rules
-  );
   static bool is_coord_in_grid_dimension(
     int coord,
     uint_fast16_t gridDimension
